@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>双端通信测试工具</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f0f2f5;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #1890ff;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #333;
+            border-bottom: 2px solid #1890ff;
+            padding-bottom: 10px;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 8px 0;
+            width: 100%;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        button.success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+        button.danger {
+            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+        }
+        .result {
+            margin-top: 16px;
+            padding: 16px;
+            background: #f0f9ff;
+            border-left: 4px solid #1890ff;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .success {
+            background: #f0fdf4;
+            border-left-color: #22c55e;
+        }
+        .error {
+            background: #fef2f2;
+            border-left-color: #ef4444;
+        }
+        code {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        .status {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status.online {
+            background: #22c55e;
+            box-shadow: 0 0 8px #22c55e;
+        }
+        .status.offline {
+            background: #9ca3af;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔗 双端通信测试工具</h1>
+    
+    <div class="container">
+        <!-- 患者端模拟 -->
+        <div class="panel">
+            <h2>📱 患者端（端口3000）</h2>
+            
+            <h3><span class="status" id="patientStatus"></span>状态监测</h3>
+            <button onclick="checkPatient端()">检查患者端状态</button>
+            <div id="patientStatusResult" class="result" style="display:none;"></div>
+            
+            <h3>📤 发送评估数据</h3>
+            <button onclick="sendAssessment()" class="success">
+                模拟患者完成评估
+            </button>
+            <div id="assessmentResult" class="result" style="display:none;"></div>
+            
+            <h3>📤 发送症状记录（正常）</h3>
+            <button onclick="sendNormalSymptom()" class="success">
+                发送正常症状
+            </button>
+            <div id="normalSymptomResult" class="result" style="display:none;"></div>
+            
+            <h3>⚠️ 发送异常预警</h3>
+            <button onclick="sendAlertSymptom()" class="danger">
+                发送异常症状（触发预警）
+            </button>
+            <div id="alertSymptomResult" class="result" style="display:none;"></div>
+            
+            <h3>📥 接收医护消息</h3>
+            <button onclick="checkMessages()">
+                查看收到的消息
+            </button>
+            <div id="messagesResult" class="result" style="display:none;"></div>
+        </div>
+        
+        <!-- 医护端模拟 -->
+        <div class="panel">
+            <h2>🏥 医护端（端口5173）</h2>
+            
+            <h3><span class="status" id="medicalStatus"></span>状态监测</h3>
+            <button onclick="checkMedical端()">检查医护端状态</button>
+            <div id="medicalStatusResult" class="result" style="display:none;"></div>
+            
+            <h3>📥 查看患者列表</h3>
+            <button onclick="viewPatients()">
+                读取患者数据
+            </button>
+            <div id="patientsResult" class="result" style="display:none;"></div>
+            
+            <h3>📥 查看症状记录</h3>
+            <button onclick="viewSymptoms()">
+                读取症状记录
+            </button>
+            <div id="symptomsResult" class="result" style="display:none;"></div>
+            
+            <h3>🚨 查看预警列表</h3>
+            <button onclick="viewAlerts()" class="danger">
+                读取未处理预警
+            </button>
+            <div id="alertsResult" class="result" style="display:none;"></div>
+            
+            <h3>📤 发送消息给患者</h3>
+            <button onclick="sendToPatient()" class="success">
+                模拟护士发送消息
+            </button>
+            <div id="sendResult" class="result" style="display:none;"></div>
+        </div>
+    </div>
+    
+    <div class="panel" style="margin-top: 20px;">
+        <h2>🧹 清理数据</h2>
+        <button onclick="clearAll()" class="danger" style="width: auto; padding: 12px 48px;">
+            清空所有测试数据
+        </button>
+        <p style="color: #666; margin-top: 12px;">
+            演示前建议清空数据，从干净状态开始
+        </p>
+    </div>
+
+    <script>
+        // 患者端函数
+        function checkPatient端() {
+            const result = document.getElementById('patientStatusResult');
+            const status = document.getElementById('patientStatus');
+            
+            try {
+                fetch('http://localhost:3000')
+                    .then(res => {
+                        if (res.ok) {
+                            result.className = 'result success';
+                            result.innerHTML = '✅ 患者端运行正常！<br>访问: <a href="http://localhost:3000" target="_blank">http://localhost:3000</a>';
+                            status.className = 'status online';
+                        } else {
+                            throw new Error('响应异常');
+                        }
+                    })
+                    .catch(err => {
+                        result.className = 'result error';
+                        result.innerHTML = '❌ 患者端未运行！<br>请执行: <code>npm run dev</code>';
+                        status.className = 'status offline';
+                    });
+                result.style.display = 'block';
+            } catch (error) {
+                result.className = 'result error';
+                result.innerHTML = '❌ 检查失败';
+                result.style.display = 'block';
+            }
+        }
+
+        function sendAssessment() {
+            const data = {
+                patientId: 'P001',
+                patientName: '测试患者-王奶奶',
+                age: 75,
+                gender: '女',
+                surgeryType: '心脏手术',
+                timestamp: new Date().toISOString(),
+                riskScore: 75,
+                riskLevel: '高风险',
+                factors: [
+                    { name: '年龄', value: '75岁以上', weight: 3, isRisk: true },
+                    { name: '手术类型', value: '心脏手术', weight: 3, isRisk: true },
+                    { name: '认知情况', value: '经常忘事', weight: 4, isRisk: true }
+                ],
+                personalizedAdvice: [
+                    '术前充分休息，保证睡眠质量',
+                    '家属陪伴，提供情感支持',
+                    '与主治医生讨论用药方案'
+                ],
+                nextSteps: ['开始每日健康记录', '学习预防知识'],
+                status: 'pending'
+            };
+            
+            const existing = JSON.parse(localStorage.getItem('medical_patient_assessments') || '[]');
+            existing.push(data);
+            localStorage.setItem('medical_patient_assessments', JSON.stringify(existing));
+            
+            const result = document.getElementById('assessmentResult');
+            result.className = 'result success';
+            result.innerHTML = `
+                ✅ 评估数据已发送！<br>
+                患者：${data.patientName}<br>
+                风险评分：${data.riskScore}分<br>
+                风险等级：${data.riskLevel}<br>
+                <br>
+                <strong>请在医护端查看（3秒内应该出现）</strong>
+            `;
+            result.style.display = 'block';
+        }
+
+        function sendNormalSymptom() {
+            const data = {
+                patientId: 'P001',
+                patientName: '测试患者-王奶奶',
+                date: new Date().toLocaleDateString('zh-CN'),
+                timestamp: new Date().toISOString(),
+                cognition: 5,
+                sleep: 5,
+                mood: 5,
+                appetite: 5,
+                notes: '今天感觉很好',
+                aiAnalysis: '✅ 今日状态良好！继续保持。',
+                riskLevel: 'normal'
+            };
+            
+            const existing = JSON.parse(localStorage.getItem('medical_symptom_records') || '[]');
+            existing.push(data);
+            localStorage.setItem('medical_symptom_records', JSON.stringify(existing));
+            
+            const result = document.getElementById('normalSymptomResult');
+            result.className = 'result success';
+            result.innerHTML = `
+                ✅ 正常症状记录已发送！<br>
+                认知: 😊5分 | 睡眠: 😴5分 | 情绪: 😄5分 | 食欲: 🍽️5分
+            `;
+            result.style.display = 'block';
+        }
+
+        function sendAlertSymptom() {
+            const data = {
+                patientId: 'P001',
+                patientName: '测试患者-王奶奶',
+                date: new Date().toLocaleDateString('zh-CN'),
+                timestamp: new Date().toISOString(),
+                cognition: 2,
+                sleep: 2,
+                mood: 2,
+                appetite: 2,
+                notes: '今天有点不舒服',
+                aiAnalysis: '🚨 检测到明显异常！建议立即联系医护人员。主要问题：认知功能下降、严重睡眠障碍、情绪极度低落。',
+                riskLevel: 'alert'
+            };
+            
+            const existing = JSON.parse(localStorage.getItem('medical_symptom_records') || '[]');
+            existing.push(data);
+            localStorage.setItem('medical_symptom_records', JSON.stringify(existing));
+            
+            // 添加预警
+            const alerts = JSON.parse(localStorage.getItem('medical_alerts') || '[]');
+            alerts.push({
+                id: `alert_${Date.now()}`,
+                patientId: data.patientId,
+                patientName: data.patientName,
+                type: 'symptom_alert',
+                severity: 'high',
+                content: `${data.patientName} 症状异常：${data.aiAnalysis}`,
+                timestamp: data.timestamp,
+                read: false
+            });
+            localStorage.setItem('medical_alerts', JSON.stringify(alerts));
+            
+            const result = document.getElementById('alertSymptomResult');
+            result.className = 'result error';
+            result.innerHTML = `
+                🚨 异常症状已发送！预警已触发！<br>
+                认知: 😕2分 | 睡眠: 😪2分 | 情绪: 😰2分 | 食欲: 🥄2分<br>
+                <br>
+                <strong>医护端应该弹出预警Modal！</strong>
+            `;
+            result.style.display = 'block';
+        }
+
+        function checkMessages() {
+            const messages = JSON.parse(localStorage.getItem('medical_messages_P001') || '[]');
+            const result = document.getElementById('messagesResult');
+            
+            if (messages.length === 0) {
+                result.className = 'result';
+                result.innerHTML = '📭 暂无消息<br>请在医护端发送消息后查看';
+            } else {
+                result.className = 'result success';
+                result.innerHTML = `
+                    ✅ 收到 ${messages.length} 条消息：<br>
+                    ${messages.map((msg, i) => `
+                        ${i + 1}. ${msg.sender}: ${msg.content} 
+                        <small>(${new Date(msg.timestamp).toLocaleTimeString()})</small>
+                    `).join('<br>')}
+                `;
+            }
+            result.style.display = 'block';
+        }
+
+        // 医护端函数
+        function checkMedical端() {
+            const result = document.getElementById('medicalStatusResult');
+            const status = document.getElementById('medicalStatus');
+            
+            try {
+                fetch('http://localhost:5173')
+                    .then(res => {
+                        if (res.ok) {
+                            result.className = 'result success';
+                            result.innerHTML = '✅ 医护端运行正常！<br>访问: <a href="http://localhost:5173/patient-monitor" target="_blank">http://localhost:5173/patient-monitor</a>';
+                            status.className = 'status online';
+                        } else {
+                            throw new Error('响应异常');
+                        }
+                    })
+                    .catch(err => {
+                        result.className = 'result error';
+                        result.innerHTML = '❌ 医护端未运行！<br>请在医护端目录执行: <code>npm run dev</code>';
+                        status.className = 'status offline';
+                    });
+                result.style.display = 'block';
+            } catch (error) {
+                result.className = 'result error';
+                result.innerHTML = '❌ 检查失败';
+                result.style.display = 'block';
+            }
+        }
+
+        function viewPatients() {
+            const patients = JSON.parse(localStorage.getItem('medical_patient_assessments') || '[]');
+            const result = document.getElementById('patientsResult');
+            
+            if (patients.length === 0) {
+                result.className = 'result';
+                result.innerHTML = '📋 暂无患者数据<br>请在患者端完成评估后查看';
+            } else {
+                result.className = 'result success';
+                result.innerHTML = `
+                    ✅ 共 ${patients.length} 名患者：<br>
+                    ${patients.map((p, i) => `
+                        ${i + 1}. ${p.patientName} - ${p.age}岁 - ${p.surgeryType}<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;风险评分: <strong style="color: ${p.riskScore >= 60 ? '#ef4444' : '#22c55e'}">${p.riskScore}分</strong> | 
+                        等级: ${p.riskLevel}
+                    `).join('<br>')}
+                `;
+            }
+            result.style.display = 'block';
+        }
+
+        function viewSymptoms() {
+            const symptoms = JSON.parse(localStorage.getItem('medical_symptom_records') || '[]');
+            const result = document.getElementById('symptomsResult');
+            
+            if (symptoms.length === 0) {
+                result.className = 'result';
+                result.innerHTML = '📋 暂无症状记录<br>请在患者端提交症状后查看';
+            } else {
+                result.className = 'result success';
+                result.innerHTML = `
+                    ✅ 共 ${symptoms.length} 条记录：<br>
+                    ${symptoms.map((s, i) => `
+                        ${i + 1}. ${s.patientName} - ${s.date}<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;认知:${s.cognition}/5 | 睡眠:${s.sleep}/5 | 情绪:${s.mood}/5 | 食欲:${s.appetite}/5<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;${s.aiAnalysis}
+                    `).join('<br>')}
+                `;
+            }
+            result.style.display = 'block';
+        }
+
+        function viewAlerts() {
+            const alerts = JSON.parse(localStorage.getItem('medical_alerts') || '[]');
+            const unread = alerts.filter(a => !a.read);
+            const result = document.getElementById('alertsResult');
+            
+            if (unread.length === 0) {
+                result.className = 'result';
+                result.innerHTML = '✅ 暂无未处理预警';
+            } else {
+                result.className = 'result error';
+                result.innerHTML = `
+                    🚨 <strong>${unread.length} 条未读预警：</strong><br>
+                    ${unread.map((a, i) => `
+                        ${i + 1}. ${a.patientName} - ${a.content}<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<small>${new Date(a.timestamp).toLocaleString()}</small>
+                    `).join('<br>')}
+                    <br><br>
+                    <strong>医护端患者监控页面应该弹出预警Modal！</strong>
+                `;
+            }
+            result.style.display = 'block';
+        }
+
+        function sendToPatient() {
+            const messages = JSON.parse(localStorage.getItem('medical_messages_P001') || '[]');
+            const newMessage = {
+                id: `msg_${Date.now()}`,
+                patientId: 'P001',
+                from: 'nurse',
+                sender: '张护士',
+                content: '您好！我已查看您的记录，状态不错。请继续保持，有问题随时联系我。',
+                timestamp: new Date().toISOString(),
+                type: 'feedback',
+                read: false
+            };
+            
+            messages.push(newMessage);
+            localStorage.setItem('medical_messages_P001', JSON.stringify(messages));
+            
+            const result = document.getElementById('sendResult');
+            result.className = 'result success';
+            result.innerHTML = `
+                ✅ 消息已发送给患者P001！<br>
+                内容：${newMessage.content}<br>
+                <br>
+                <strong>请在患者端"我的医护"页面查看</strong>
+            `;
+            result.style.display = 'block';
+        }
+
+        function clearAll() {
+            if (confirm('确定要清空所有测试数据吗？')) {
+                localStorage.removeItem('medical_patient_assessments');
+                localStorage.removeItem('medical_symptom_records');
+                localStorage.removeItem('medical_alerts');
+                localStorage.removeItem('medical_messages_P001');
+                localStorage.removeItem('symptom_records');
+                
+                alert('✅ 所有数据已清空！可以开始干净的演示了。');
+                location.reload();
+            }
+        }
+
+        // 页面加载时检查状态
+        window.onload = function() {
+            checkPatient端();
+            checkMedical端();
+        };
+
+        // 自动刷新状态（每5秒）
+        setInterval(() => {
+            const patientStatus = document.getElementById('patientStatus');
+            const medicalStatus = document.getElementById('medicalStatus');
+            
+            fetch('http://localhost:3000').then(() => {
+                patientStatus.className = 'status online';
+            }).catch(() => {
+                patientStatus.className = 'status offline';
+            });
+            
+            fetch('http://localhost:5173').then(() => {
+                medicalStatus.className = 'status online';
+            }).catch(() => {
+                medicalStatus.className = 'status offline';
+            });
+        }, 5000);
+    </script>
+</body>
+</html>
+
